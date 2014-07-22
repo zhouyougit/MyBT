@@ -1,39 +1,24 @@
 #coding=utf-8
 
-import network as nw
+from protocol import BTNetService, BTCommand
 
+class TextCommand(BTCommand) :
+    def process(self, request, response) :
+        print 'received request', request.param
+        response.result = 'received :' + str(request.param)
 
-class TrackerHandler(nw.IoHandler) :
-    def __init__(self, tracker) :
-        self.tracker = tracker
-
-    def connected(self, ioSession) :
-        pass
-
-    def closed(self, ioSession) :
-        pass
-
-    def exceptionCaught(self, ioSession, e) :
-        ioSession.close()
-
-    def msgRecv(self, ioSession, msg) :
-        pass
-
-    def msgSent(self, ioSession, msg) :
-        pass
-
-class Tracker(object) :
+class BTTracker(object) :
     def __init__(self, port) :
         self.port = port
-        self.ioService = nw.IoService()
-        self.ioService.setHandler(TrackerHandler(self))
+        self.service = BTNetService()
+        self.service.addCmd('text', TextCommand())
 
     def run(self) :
-        self.ioService.listen(self.port)
-        self.ioService.run()
+        self.service.listen(self.port)
+        self.service.run()
 
 
 if __name__ == '__main__' :
-    tracker = Tracker(1988)
+    tracker = BTTracker(1988)
     tracker.run()
 

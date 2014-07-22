@@ -54,13 +54,15 @@ class BaseReactor(object) :
                     if len(submsg) < BaseReactor.MAX_READ_SIZE :
                         break
             except socket.error, e :
-                break
+                print e
             if len(msg) == 1 :
                 allMsg = msg[0]
             else :
                 allMsg = ''.join(msg)
-
-            session.ioService.handler.msgRecv(session, allMsg)
+            if not allMsg :
+                session.close()
+            else :
+                session.ioService.handler.msgRecv(session, allMsg)
 
     def fireWrite(self, sessions) :
         for session in sessions :
@@ -120,7 +122,6 @@ class SelectReactor(BaseReactor) :
 
     def loop(self, timeout) :
         r, w, e = select.select(self._readers, self._writers, set.union(self._readers, self._writers), timeout)
-
         if e :
             self.fireException(e)
 
@@ -188,6 +189,7 @@ class IoSession(object) :
         self.ioService.reactor.addWriter(self)
 
     def close(self) :
+        self.ioService.handler.closed(self)
         if self.isReading :
             self.ioService.reactor.removeReader(self)
         if self.isWriting :
@@ -205,7 +207,11 @@ class IoSession(object) :
         self.ioService.freeIoSession(self)
 
     def remoteAddr(self) :
-        return self.skt.getpeername()
+        try :
+            addr = self.skt.getpeername()
+        except socket.error, e:
+            addr = None
+        return addr
 
     def localAddr(self) :
         return self.skt.getsockname()
@@ -298,6 +304,9 @@ class IoService(object) :
         session.read()
 
     def addTimerEvent(self, callback, data, expires) :
+        self.timerEventQueue.addTimerEvent((callback, data), int(time.time() * 1000) + expires)
+
+    def addTimerEventAt(self, callback, data, expires) :
         self.timerEventQueue.addTimerEvent((callback, data), expires)
 
     def removeTimerEvent(self, taskId) :
@@ -326,12 +335,11 @@ class IoService(object) :
                         if not callable(event[0]) :
                             continue
                         event[0](event[1])
-            self.addCond.acquire()
-            self.needAdd = False
-            if self.addEvent :
-                self.addTimerEvent(*(self.addEvent))
-            self.addCond.notify()
-            self.addCond.release()
+            with self.addCond :
+                self.needAdd = False
+                if self.addEvent :
+                    self.addTimerEvent(*(self.addEvent))
+                self.addCond.notify()
 
     def stop(self) :
         self.running = False
@@ -349,7 +357,7 @@ class IoService(object) :
     def createIoSession(self, skt) :
         if self.freeSessions :
             session = self.freeSessions.pop()
-            session.sid = ioService.sidCounter.next()
+            session.sid = self.sidCounter.next()
             session.skt = skt
         else :
             session = IoSession(self, skt)
@@ -360,22 +368,21 @@ class IoService(object) :
             self.freeSessions.append(session)
     
     def _safeAddTimerEvent(self, callback, data, expires) :
-        self.addLock.acquire()
-        self.addCond.acquire()
-        self.addEvent = (callback, data, expires)
-        self.needAdd = True
-        self.addCond.wait()
-        self.addCond.release()
-        self.addLock.release()
+        with self.addLock :
+            with self.addCond :
+                self.addEvent = (callback, data, expires)
+                self.needAdd = True
+                self.addCond.wait()
         
     def safeConnect(self, addr, **attr) :
         def createConnect(data) :
             self.connect(addr, **attr)
         self._safeAddTimerEvent(createConnect, None, 0)
     
-    def connect(self, addr, **argv) :
+    def connect(self, addr, **attr) :
         skt = self._createSocket()
         err = skt.connect_ex(addr)
+        print err
         session = self.createIoSession(skt)
         session.isConnecting = True
         session.attr.update(attr)
@@ -417,8 +424,4 @@ if __name__ == '__main__' :
     ioService.setHandler(MyHandler())
     ioService.listen(11223)
 
-    def task2() :
-        time.sleep(3)
-        ioService.safeConnect(('localhost', 11224), cmd = 'connect')
-    thread.start_new_thread(task2, ())
     ioService.run()
