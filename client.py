@@ -7,6 +7,8 @@ import getopt
 import sys
 import os
 import seed
+import downloadStat
+import _utils
 
 def respCallback(response) :
     print response.result
@@ -42,7 +44,21 @@ def buildSeedFile(targetFile, tracker, seedFileName) :
     print seedFile
 
 def publishFile(todir, seedFile) :
-    pass
+    if not os.path.isdir(todir) :
+        print 'todir %s is not directory.' % (todir,)
+        exit()
+    if not os.path.exists(seedFile) :
+        print 'seed file : %s not found.' % (seedFile,)
+        exit()
+    if not os.path.isfile(seedFile) :
+        print 'seed file : %s is not file.' % (seedFile,)
+
+    seedFile = seed.Seed(seedFile)
+    dlStat = downloadStat.DownloadStat(todir, seedFile, True)
+    print dlStat.getPercent()
+    statStr = dlStat.getStatStr()
+    _utils.printByteStr(statStr)
+    
 
 def downloadFile(todir, seedFile) :
     pass
@@ -61,7 +77,7 @@ def usage() :
      client.py seedFileName.bt
      client.py -d targetDir seedFileName.bt
  Publish file :
-     client.py -s -d targetDir seedFileName.bt
+     client.py -p -d targetDir seedFileName.bt
  '''
 
 def main(argv) :

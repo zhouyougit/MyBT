@@ -53,14 +53,23 @@ class Seed(object) :
     def setChecksum(self, checksumList) :
         self.__conn.executemany("insert into piece values (?, ?)", enumerate(checksumList, 1))
     
-    def getChecksum(self, idx) :
-        cur = self.__conn.execute("select checksum from piece where idx = ?", (str(idx),))
-        row = cur.fetchone()
-        cur.close()
-        if row :
-            return row[0]
+    def getChecksum(self, idx = None) :
+        if idx :
+            cur = self.__conn.execute("select checksum from piece where idx = ?", (str(idx),))
+            row = cur.fetchone()
+            cur.close()
+            if row :
+                return row[0]
+            else :
+                return None
         else :
-            return None
+            cur = self.__conn.execute("select checksum from piece order by idx")
+            data = cur.fetchall()
+            cur.close()
+            if data :
+                return [r[0] for r in data]
+            else :
+                return []
 
     def __del__(self) :
         self.__conn.close()
